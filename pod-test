@@ -1,9 +1,11 @@
 #!/bin/bash
 dom=$1
 keep=$2
+
 image=ghcr.io/diamondlightsource/dev-c7:2025.11.1
 ns="accelerator"
 podname=debug-pod-${USER}
+
 source /dls_sw/kubernetes/klogin/1.0/acastus
 
 if [[ -z $dom ]]; then
@@ -46,6 +48,7 @@ echo "deleting existing debug pod ${podname} if present"
 kubectl delete pod ${podname} -n ${ns} --ignore-not-found=true
 echo "starting debug pod ${podname} in namespace ${ns} ..."
 set -x
+
 if [[ -z $keep ]]; then
     kubectl run --rm -ti ${podname} --overrides="${overrides}" -n ${ns} --image ${image}
 else
