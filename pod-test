@@ -4,9 +4,16 @@ keep=$2
 
 image=ghcr.io/diamondlightsource/dev-c7:2025.11.1
 ns="accelerator"
-podname=debug-pod-${USER}
 
 source /dls_sw/kubernetes/klogin/1.0/acastus
+
+# Claim the lowest free slot number so concurrent runs each get their own pod.
+# --rm releases the slot on exit, so the numbers stay low rather than creeping up.
+base=debug-pod-${USER}
+existing=$(kubectl get pods -n ${ns} -o name 2>/dev/null | grep -o "${base}-[0-9]*$")
+n=1
+while grep -qxF "${base}-${n}" <<<"$existing"; do ((n++)); done
+podname=${base}-${n}
 
 if [[ -z $dom ]]; then
     node_spec=""
@@ -44,8 +51,6 @@ overrides=$(cat <<EOF
 EOF
 )
 
-echo "deleting existing debug pod ${podname} if present"
-kubectl delete pod ${podname} -n ${ns} --ignore-not-found=true
 echo "starting debug pod ${podname} in namespace ${ns} ..."
 set -x
 
