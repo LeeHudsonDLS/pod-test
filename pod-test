@@ -1,0 +1,53 @@
+#!/bin/bash
+dom=$1
+keep=$2
+image=ghcr.io/diamondlightsource/dev-c7:2025.11.1
+ns="accelerator"
+podname=debug-pod-${USER}
+source /dls_sw/kubernetes/klogin/1.0/acastus
+
+if [[ -z $dom ]]; then
+    node_spec=""
+else
+    node_spec="\"nodeName\": \"${dom}-k8s-serv-01.pri.diamond.ac.uk\","
+fi
+
+overrides=$(cat <<EOF
+{
+  "metadata": {"annotations": {"usb-compat": "enabled"}},
+  "spec": {
+    "hostNetwork": true,
+    ${node_spec}
+    "containers": [
+      {
+        "name": "${podname}",
+        "image": "${image}",
+        "stdin": true,
+        "tty": true,
+        "command": ["/bin/bash", "-c", "echo 'source /etc/bashrc 2>/dev/null; alias work=\"cd /dls_sw/work/R3.14.12.7\"' > /tmp/initrc; exec bash --rcfile /tmp/initrc"],
+        "volumeMounts": [
+          { "name": "dls-sw-work",     "mountPath": "/dls_sw/work",     "readOnly": true, "mountPropagation": "HostToContainer" },
+          { "name": "dls-sw-prod",     "mountPath": "/dls_sw/prod",     "readOnly": true, "mountPropagation": "HostToContainer" },
+          { "name": "dls-sw-epics",    "mountPath": "/dls_sw/epics",    "readOnly": true, "mountPropagation": "HostToContainer" }
+        ]
+      }
+    ],
+    "volumes": [
+      { "name": "dls-sw-work",     "hostPath": {"path": "/dls_sw/work",     "type": "Directory"} },
+      { "name": "dls-sw-prod",     "hostPath": {"path": "/dls_sw/prod",     "type": "Directory"} },
+      { "name": "dls-sw-epics",    "hostPath": {"path": "/dls_sw/epics",    "type": "Directory"} }
+    ]
+  }
+}
+EOF
+)
+
+echo "deleting existing debug pod ${podname} if present"
+kubectl delete pod ${podname} -n ${ns} --ignore-not-found=true
+echo "starting debug pod ${podname} in namespace ${ns} ..."
+set -x
+if [[ -z $keep ]]; then
+    kubectl run --rm -ti ${podname} --overrides="${overrides}" -n ${ns} --image ${image}
+else
+    kubectl run -ti ${podname} --overrides="${overrides}" -n ${ns} --image ${image}
+fi
