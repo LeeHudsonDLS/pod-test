@@ -1,6 +1,70 @@
 #!/bin/bash
-dom=$1
-keep=$2
+# usage: pod-test [-h] [--version] [dom|node] [--node 1|2] [keep]
+#   dom   e.g. sr03c          -> sr03c-k8s-serv-01.pri.diamond.ac.uk
+#   node  e.g. sr03c-k8s-serv-02 (partial) or a fully qualified name
+
+usage() {
+    cat <<EOF
+usage: pod-test [-h] [--version] [DOMAIN|NODE] [--node 1|2] [keep]
+
+Start an interactive debug pod (dev-c7, host networking, /dls_sw mounted
+read-only) in the accelerator namespace, optionally pinned to a worker node.
+
+arguments:
+  DOMAIN        domain to run on, e.g. sr03c -> sr03c-k8s-serv-01.pri.diamond.ac.uk
+  NODE          node name instead of a domain:
+                  sr03c-k8s-serv-02                    .pri.diamond.ac.uk is added
+                  sr03c-k8s-serv-02.pri.diamond.ac.uk  used as given
+                omit to let Kubernetes choose any node
+  keep          any value keeps the pod after you exit (default: removed)
+
+options:
+  --node 1|2    server number to use with DOMAIN (default 1); ignored with NODE
+  -h, --help    show this help and exit
+  --version     show the installed Git tag or commit and exit
+
+examples:
+  pod-test                      any node
+  pod-test sr03c --node 2       sr03c-k8s-serv-02.pri.diamond.ac.uk
+  pod-test sr03c-k8s-serv-02    same node
+  pod-test sr03c keep           keep the pod after exiting
+
+Exit the shell (exit or Ctrl-D) to end the session; the pod is deleted
+unless keep was given. Remove a kept pod with:
+  kubectl delete pod debug-pod-\$USER-N -n accelerator
+EOF
+}
+
+# Replaced with the Git tag or commit by install.sh.
+version=unknown
+node_num=1
+positional=()
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        --version)
+            echo "pod-test $version"
+            exit 0
+            ;;
+        --node)
+            node_num=$2
+            if [[ ! $node_num =~ ^[12]$ ]]; then
+                echo "--node must be 1 or 2" >&2
+                exit 1
+            fi
+            shift 2
+            ;;
+        *)
+            positional+=("$1")
+            shift
+            ;;
+    esac
+done
+dom=${positional[0]}
+keep=${positional[1]}
 
 image=ghcr.io/diamondlightsource/dev-c7:2025.11.1
 ns="accelerator"
@@ -18,7 +82,14 @@ podname=${base}-${n}
 if [[ -z $dom ]]; then
     node_spec=""
 else
-    node_spec="\"nodeName\": \"${dom}-k8s-serv-01.pri.diamond.ac.uk\","
+    if [[ $dom == *.* ]]; then
+        node=$dom
+    elif [[ $dom == *-k8s-* ]]; then
+        node=${dom}.pri.diamond.ac.uk
+    else
+        node=${dom}-k8s-serv-0${node_num}.pri.diamond.ac.uk
+    fi
+    node_spec="\"nodeName\": \"${node}\","
 fi
 
 overrides=$(cat <<EOF
