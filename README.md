@@ -7,7 +7,8 @@ the node. You can pin it to a particular worker node, which is useful for
 checking what an IOC on that node can see on the network.
 
 It logs in with `/dls_sw/kubernetes/klogin/1.0/acastus`, so run it from a
-workstation that can reach that cluster.
+workstation that can reach that cluster. If your token has expired, you are asked
+to log in before the pod starts.
 
 ## Install
 
@@ -51,6 +52,26 @@ Several pods can run at once. Each run takes the lowest free name in the
 `debug-pod-$USER-1`, `-2`, … sequence.
 
 Inside the pod, the `work` alias does a `cd` to `/dls_sw/work/R3.14.12.7`.
+
+## User and ssh
+
+The namespace policy runs the pod as UID 36112, the `k8s-accelerator`
+identity, which has no entry in the image's `/etc/passwd`. Without one, the
+prompt shows `I have no name!` and `ssh` fails with
+`No user exists for uid 36112`.
+
+To fix this, the pod has an init container (`passwd`) that runs before your
+shell. It copies the image's `/etc/passwd` and `/etc/group` into an `emptyDir`
+volume, adds a `k8s-accelerator` entry for the pod's UID and GID, and exits.
+The shell container mounts those copies over its own `/etc/passwd` and
+`/etc/group`. Nothing is written to the node, and the files go when the pod
+does. `HOME` is `/tmp`, so `ssh` can save host keys in `/tmp/.ssh`.
+
+Your workstation's ssh keys are not in the pod, so you log in with a password:
+
+```bash
+ssh root@192.168.6.22
+```
 
 ## Exiting
 
